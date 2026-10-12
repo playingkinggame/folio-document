@@ -63,6 +63,8 @@ uvicorn app.main:app --reload --port 8000
 
 The API reads `SUPABASE_URL` from `backend/.env` regardless of which folder you launch it from. The local CORS default allows both `localhost:5173` and `127.0.0.1:5173`. After changing environment variables, restart the backend; with `--reload`, changing Python code reloads it automatically.
 
+The default LLM models are Groq `openai/gpt-oss-120b` and Gemini `gemini-3.8-flash`. Set `GROQ_MODEL` or `GEMINI_MODEL` in `backend/.env` and the Railway API variables to change them. Optional `GROQ_EXTRA_MODELS` and `GEMINI_EXTRA_MODELS` values add provider-specific fallbacks after the configured primary model.
+
 The first start downloads the embedding model (about 130 MB) and takes a minute.
 
 **2. Frontend** (second terminal)
