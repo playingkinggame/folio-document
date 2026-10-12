@@ -1,0 +1,15 @@
+services:
+  folio:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - backend/.env
+    environment:
+      DATA_DIR: /data
+    volumes:
+      - folio-data:/data
+    restart: unless-stopped
+
+volumes:
+  folio-data:

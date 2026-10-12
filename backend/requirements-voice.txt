@@ -1,0 +1,8 @@
+# Optional: the LiveKit voice tutor. Install on top of requirements.txt
+livekit-agents>=1.2
+livekit-api>=1.0
+livekit-plugins-silero>=1.2
+livekit-plugins-turn-detector>=1.2
+livekit-plugins-groq>=1.2
+livekit-plugins-google>=1.2
+httpx>=0.27
