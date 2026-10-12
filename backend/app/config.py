@@ -22,7 +22,7 @@ class Settings:
     groq_model: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
     groq_extra_models: list[str] = field(default_factory=lambda: _list(os.getenv("GROQ_EXTRA_MODELS", "llama-3.1-8b-instant")))
     gemini_api_key: str = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY", "")
-    gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
     gemini_extra_models: list[str] = field(default_factory=lambda: _list(os.getenv("GEMINI_EXTRA_MODELS", "")))
 
     # Retrieval
