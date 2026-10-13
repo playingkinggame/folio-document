@@ -26,11 +26,33 @@ log = logging.getLogger("folio.store")
 COLLECTION = "documents"
 
 
+def mem_info() -> str:
+    """Process RSS and container (cgroup) memory, so a memory kill shows up in the logs."""
+    parts = []
+    try:
+        with open("/proc/self/status") as f:
+            rss_kb = next(int(l.split()[1]) for l in f if l.startswith("VmRSS"))
+        parts.append(f"rss={rss_kb // 1024}MB")
+    except Exception:  # noqa: BLE001
+        pass
+    for name, path in (("container", "/sys/fs/cgroup/memory.current"), ("limit", "/sys/fs/cgroup/memory.max")):
+        try:
+            raw = open(path).read().strip()
+            parts.append(f"{name}={raw if raw == 'max' else str(int(raw) // 1048576) + 'MB'}")
+        except Exception:  # noqa: BLE001
+            pass
+    return " ".join(parts) or "n/a"
+
+
 class Store:
     def __init__(self) -> None:
         self._lock = threading.RLock()
         log.info("Loading embedding model %s (first run downloads it)...", settings.embedding_model)
-        self.embedder = TextEmbedding(model_name=settings.embedding_model, cache_dir=str(settings.models_dir))
+        self.embedder = TextEmbedding(
+            model_name=settings.embedding_model,
+            cache_dir=str(settings.models_dir),
+            threads=settings.embed_threads or None,
+        )
         dim = len(next(iter(self.embedder.embed(["dimension probe"]))))
 
         if settings.qdrant_url:
@@ -42,7 +64,7 @@ class Store:
                 COLLECTION, vectors_config=VectorParams(size=dim, distance=Distance.COSINE)
             )
         self._docs: dict[str, dict] = self._load_registry()
-        log.info("Store ready: %d document(s)", len(self._docs))
+        log.info("Store ready: %d document(s) [%s]", len(self._docs), mem_info())
 
     # ---------- registry ----------
     def _load_registry(self) -> dict[str, dict]:
@@ -73,25 +95,42 @@ class Store:
 
     # ---------- indexing ----------
     def add_document(self, meta: dict, chunks: list[Chunk]) -> dict:
+        """Embed and index in small batches so peak memory stays flat however big the file is."""
         doc_id = meta["id"]
-        vectors = [v.tolist() for v in self.embedder.passage_embed([c.text for c in chunks])]
-        points = [
-            PointStruct(
-                id=str(uuid.uuid4()),
-                vector=vec,
-                payload={
-                    "doc_id": doc_id,
-                    "doc_name": meta["name"],
-                    "page": c.page,
-                    "chunk": c.index,
-                    "text": c.text,
-                },
-            )
-            for c, vec in zip(chunks, vectors)
-        ]
+        step = max(1, settings.embed_batch)
+        try:
+            for i in range(0, len(chunks), step):
+                batch = chunks[i : i + step]
+                vectors = list(self.embedder.passage_embed([c.text for c in batch], batch_size=step))
+                points = [
+                    PointStruct(
+                        id=str(uuid.uuid4()),
+                        vector=vec.tolist(),
+                        payload={
+                            "doc_id": doc_id,
+                            "doc_name": meta["name"],
+                            "page": c.page,
+                            "chunk": c.index,
+                            "text": c.text,
+                        },
+                    )
+                    for c, vec in zip(batch, vectors)
+                ]
+                with self._lock:
+                    self.client.upsert(COLLECTION, points=points)
+                if (i // step) % 5 == 0:
+                    log.info("Indexed %d/%d passages [%s]", min(i + step, len(chunks)), len(chunks), mem_info())
+        except Exception:
+            # Don't leave half an upload behind in the vector store.
+            with self._lock:
+                self.client.delete(
+                    COLLECTION,
+                    points_selector=FilterSelector(
+                        filter=Filter(must=[FieldCondition(key="doc_id", match=MatchValue(value=doc_id))])
+                    ),
+                )
+            raise
         with self._lock:
-            for i in range(0, len(points), 64):
-                self.client.upsert(COLLECTION, points=points[i : i + 64])
             meta = {**meta, "chunks": len(chunks), "uploaded_at": time.time()}
             self._docs[doc_id] = meta
             self._save_registry()

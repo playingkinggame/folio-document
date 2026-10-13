@@ -31,6 +31,9 @@ class Settings:
     chunk_overlap: int = int(os.getenv("CHUNK_OVERLAP", "150"))
     top_k: int = int(os.getenv("TOP_K", "5"))
     min_score: float = float(os.getenv("MIN_SCORE", "0.2"))
+    # Memory control (important on small hosts): embed a few passages at a time.
+    embed_batch: int = int(os.getenv("EMBED_BATCH", "16"))
+    embed_threads: int = int(os.getenv("EMBED_THREADS", "2"))
     max_summary_chars: int = int(os.getenv("MAX_SUMMARY_CHARS", "24000"))
     # Solve tab: documents up to this many characters are read in full instead of searched.
     solve_fulldoc_chars: int = int(os.getenv("SOLVE_FULLDOC_CHARS", "14000"))

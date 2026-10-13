@@ -18,7 +18,7 @@ from . import auth, rag
 from .config import settings
 from .llm import candidates
 from .loaders import SUPPORTED, load_pages, split_pages
-from .store import get_store
+from .store import get_store, mem_info
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("folio")
@@ -71,8 +71,12 @@ def sse(generator):
 
 
 def _ingest(path: Path, display_name: str, sha256: str, size: int) -> dict:
+    log.info("Ingest start: %s (%d KB) [%s]", display_name, size // 1024, mem_info())
     pages = load_pages(path)
+    log.info("Parsed %d page(s) [%s]", len(pages), mem_info())
     chunks = split_pages(pages)
+    del pages
+    log.info("Split into %d passage(s) [%s]", len(chunks), mem_info())
     if not chunks:
         raise ValueError("No usable text could be extracted.")
     meta = {
@@ -132,8 +136,10 @@ async def upload_documents(files: list[UploadFile] = File(...)):
             continue
         path = settings.upload_dir / f"{uuid.uuid4().hex}{ext}"
         path.write_bytes(data)
+        size = len(data)
+        del data  # free the upload buffer before parsing/embedding
         try:
-            doc = await run_in_threadpool(_ingest, path, name, sha, len(data))
+            doc = await run_in_threadpool(_ingest, path, name, sha, size)
             results.append({"name": name, "ok": True, "document": doc})
         except Exception as exc:  # noqa: BLE001
             path.unlink(missing_ok=True)
