@@ -75,6 +75,7 @@ def _ingest(path: Path, display_name: str, sha256: str, size: int) -> dict:
     pages = load_pages(path)
     log.info("Parsed %d page(s) [%s]", len(pages), mem_info())
     chunks = split_pages(pages)
+    page_count = max((p.number or 0) for p in pages) or None
     del pages
     log.info("Split into %d passage(s) [%s]", len(chunks), mem_info())
     if not chunks:
@@ -84,7 +85,7 @@ def _ingest(path: Path, display_name: str, sha256: str, size: int) -> dict:
         "name": display_name,
         "ext": path.suffix.lower().lstrip("."),
         "size": size,
-        "pages": max((p.number or 0) for p in pages) or None,
+        "pages": page_count,
         "sha256": sha256,
     }
     return get_store().add_document(meta, chunks)
